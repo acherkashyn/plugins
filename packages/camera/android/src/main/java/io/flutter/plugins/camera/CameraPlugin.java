@@ -333,8 +333,8 @@ public class CameraPlugin implements MethodCallHandler {
             characteristics.get(CameraCharacteristics.LENS_FACING)
                 == CameraMetadata.LENS_FACING_FRONT;
 
-        //recordingProfile = getBestAvailableCamcorderProfileForResolutionPreset(resolutionPreset);
-        //computeBestPreviewSize(recordingProfile);
+        recordingProfile = getBestAvailableCamcorderProfileForResolutionPreset(resolutionPreset);
+        computeBestPreviewSize(recordingProfile);
         computeBestCaptureSize(streamConfigurationMap, recordingProfile, resolutionPreset);
 
         if (cameraPermissionContinuation != null) {
