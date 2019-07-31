@@ -497,19 +497,21 @@ public class CameraPlugin implements MethodCallHandler {
       }
       mediaRecorder = new MediaRecorder();
 
-      if (enableAudio) mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-      mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+      if (enableAudio) recordingProfile.setAudioSource(MediaRecorder.AudioSource.MIC);
+      if (enableAudio) recordingProfile.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+      if (enableAudio) recordingProfile.setAudioSamplingRate(16000);
+      
+      recordingProfile.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+      recordingProfile.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+      recordingProfile.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+      recordingProfile.setVideoEncodingBitRate(1024 * 1000);
+      recordingProfile.setVideoFrameRate(27);
+      recordingProfile.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
+      recordingProfile.setOutputFile(outputFilePath);
+      recordingProfile.setOrientationHint(getMediaOrientation());
+      
       mediaRecorder.setProfile(recordingProfile);
-      mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-      if (enableAudio) mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-      mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-      mediaRecorder.setVideoEncodingBitRate(1024 * 1000);
-      if (enableAudio) mediaRecorder.setAudioSamplingRate(16000);
-      //mediaRecorder.setVideoFrameRate(27);
-      //mediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
-      mediaRecorder.setOutputFile(outputFilePath);
-      mediaRecorder.setOrientationHint(getMediaOrientation());
-
+      
       mediaRecorder.prepare();
     }
 
