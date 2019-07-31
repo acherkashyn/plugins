@@ -7,6 +7,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
+import android.graphics.Point;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -25,6 +26,7 @@ import android.os.Build;
 import android.util.Size;
 import android.view.OrientationEventListener;
 import android.view.Surface;
+import android.view.Display;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import io.flutter.plugin.common.EventChannel;
@@ -460,7 +462,7 @@ public class CameraPlugin implements MethodCallHandler {
 
       if (goodEnough.isEmpty()) {
         previewSize = sizes[0];
-        videoSize = sizes[0];
+        //videoSize = sizes[0];
       } else {
         previewSize = new Size(profile.videoFrameWidth, profile.videoFrameHeight);
       }
@@ -495,8 +497,8 @@ public class CameraPlugin implements MethodCallHandler {
       mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
       mediaRecorder.setVideoEncodingBitRate(1024 * 1000);
       if (enableAudio) mediaRecorder.setAudioSamplingRate(16000);
-      mediaRecorder.setVideoFrameRate(27);
-      mediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
+      //mediaRecorder.setVideoFrameRate(27);
+      //mediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
       mediaRecorder.setOutputFile(outputFilePath);
       mediaRecorder.setOrientationHint(getMediaOrientation());
 
