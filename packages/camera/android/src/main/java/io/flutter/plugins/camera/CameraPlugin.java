@@ -423,14 +423,22 @@ public class CameraPlugin implements MethodCallHandler {
     }
 
     // The preview should never be bigger than 720p (1280 x 720) or it will mess up the recording.
-    /*private void computeBestPreviewSize(CamcorderProfile profile) {
+    private void computeBestPreviewSize(CamcorderProfile profile) {
       float ratio = (float) profile.videoFrameWidth / profile.videoFrameHeight;
       if (profile.videoFrameWidth > 1280) {
         previewSize = new Size(1280, Math.round(1280 / ratio));
       } else if (profile.videoFrameHeight > 1280) {
-        previewSize = new Size(Math.round(1280 * ratio), 1280); */
-    private void computeBestPreviewAndRecordingSize(
-      StreamConfigurationMap streamConfigurationMap, int minHeight, Size captureSize) {
+        previewSize = new Size(Math.round(1280 * ratio), 1280); 
+      } else {
+        previewSize = new Size(profile.videoFrameWidth, profile.videoFrameHeight);
+      }
+    }
+
+    /*private void computeBestPreviewAndRecordingSize(
+      CamcorderProfile profile,
+      StreamConfigurationMap streamConfigurationMap,
+      int minHeight,
+      Size captureSize) {
       Size[] sizes = streamConfigurationMap.getOutputSizes(SurfaceTexture.class);
 
       // Preview size and video size should not be greater than screen resolution or 1080.
@@ -466,7 +474,7 @@ public class CameraPlugin implements MethodCallHandler {
       } else {
         previewSize = new Size(profile.videoFrameWidth, profile.videoFrameHeight);
       }
-    }
+    }*/
 
     private void computeBestCaptureSize(
         StreamConfigurationMap streamConfigurationMap,
