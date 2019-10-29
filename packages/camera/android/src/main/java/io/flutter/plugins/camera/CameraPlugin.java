@@ -18,14 +18,15 @@ import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.CamcorderProfile;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaRecorder;
 import android.os.Build;
 import android.util.Size;
-import android.view.Display;
 import android.view.OrientationEventListener;
 import android.view.Surface;
+import android.view.Display;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import io.flutter.plugin.common.EventChannel;
@@ -79,6 +80,53 @@ public class CameraPlugin implements MethodCallHandler {
         };
 
     registrar.addRequestPermissionsResultListener(new CameraRequestPermissionsListener());
+
+    /* this.activityLifecycleCallbacks =
+        new Application.ActivityLifecycleCallbacks() {
+          @Override
+          public void onActivityCreated(Activity activity, Bundle savedInstanceState) {}
+
+          @Override
+          public void onActivityStarted(Activity activity) {}
+
+          @Override
+          public void onActivityResumed(Activity activity) {
+            boolean wasRequestingPermission = requestingPermission;
+            requestingPermission = false;
+            if (activity != CameraPlugin.this.activity) {
+              return;
+            }
+            orientationEventListener.enable();
+            if (camera != null && !wasRequestingPermission) {
+              camera.open(null);
+            }
+          }
+
+          @Override
+          public void onActivityPaused(Activity activity) {
+            if (activity == CameraPlugin.this.activity) {
+              orientationEventListener.disable();
+              if (camera != null) {
+                camera.close();
+              }
+            }
+          }
+
+          @Override
+          public void onActivityStopped(Activity activity) {
+            if (activity == CameraPlugin.this.activity) {
+              if (camera != null) {
+                camera.close();
+              }
+            }
+          }
+
+          @Override
+          public void onActivitySaveInstanceState(Activity activity, Bundle outState) {}
+
+          @Override
+          public void onActivityDestroyed(Activity activity) {}
+        }; */
   }
 
   public static void registerWith(Registrar registrar) {
@@ -166,6 +214,16 @@ public class CameraPlugin implements MethodCallHandler {
           camera.stopVideoRecording(result);
           break;
         }
+      case "pauseVideoRecording":
+        {
+          camera.pauseVideoRecording(result);
+          break;
+        }
+      case "resumeVideoRecording":
+        {
+          camera.resumeVideoRecording(result);
+          break;
+        }
       case "startImageStream":
         {
           try {
@@ -247,9 +305,9 @@ public class CameraPlugin implements MethodCallHandler {
     private Size captureSize;
     private Size previewSize;
     private CaptureRequest.Builder captureRequestBuilder;
-    private Size videoSize;
     private MediaRecorder mediaRecorder;
     private boolean recordingVideo;
+    private CamcorderProfile recordingProfile;
     private boolean enableAudio;
 
     Camera(
@@ -265,32 +323,21 @@ public class CameraPlugin implements MethodCallHandler {
       registerEventChannel();
 
       try {
-        int minHeight;
-        switch (resolutionPreset) {
-          case "high":
-            minHeight = 720;
-            break;
-          case "medium":
-            minHeight = 480;
-            break;
-          case "low":
-            minHeight = 240;
-            break;
-          default:
-            throw new IllegalArgumentException("Unknown preset: " + resolutionPreset);
-        }
 
         CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraName);
         StreamConfigurationMap streamConfigurationMap =
             characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+
         //noinspection ConstantConditions
         sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
         //noinspection ConstantConditions
         isFrontFacing =
             characteristics.get(CameraCharacteristics.LENS_FACING)
                 == CameraMetadata.LENS_FACING_FRONT;
-        computeBestCaptureSize(streamConfigurationMap);
-        computeBestPreviewAndRecordingSize(streamConfigurationMap, minHeight, captureSize);
+
+        recordingProfile = getBestAvailableCamcorderProfileForResolutionPreset(resolutionPreset);
+        computeBestPreviewSize(recordingProfile);
+        computeBestCaptureSize(streamConfigurationMap, recordingProfile, resolutionPreset);
 
         if (cameraPermissionContinuation != null) {
           result.error("cameraPermission", "Camera permission request ongoing", null);
@@ -375,8 +422,23 @@ public class CameraPlugin implements MethodCallHandler {
               == PackageManager.PERMISSION_GRANTED;
     }
 
-    private void computeBestPreviewAndRecordingSize(
-        StreamConfigurationMap streamConfigurationMap, int minHeight, Size captureSize) {
+    // The preview should never be bigger than 720p (1280 x 720) or it will mess up the recording.
+    private void computeBestPreviewSize(CamcorderProfile profile) {
+      float ratio = (float) profile.videoFrameWidth / profile.videoFrameHeight;
+      if (profile.videoFrameWidth > 1280) {
+        previewSize = new Size(1280, Math.round(1280 / ratio));
+      } else if (profile.videoFrameHeight > 1280) {
+        previewSize = new Size(Math.round(1280 * ratio), 1280); 
+      } else {
+        previewSize = new Size(profile.videoFrameWidth, profile.videoFrameHeight);
+      }
+    }
+
+    /*private void computeBestPreviewAndRecordingSize(
+      CamcorderProfile profile,
+      StreamConfigurationMap streamConfigurationMap,
+      int minHeight,
+      Size captureSize) {
       Size[] sizes = streamConfigurationMap.getOutputSizes(SurfaceTexture.class);
 
       // Preview size and video size should not be greater than screen resolution or 1080.
@@ -408,35 +470,25 @@ public class CameraPlugin implements MethodCallHandler {
 
       if (goodEnough.isEmpty()) {
         previewSize = sizes[0];
-        videoSize = sizes[0];
+        //videoSize = sizes[0];
       } else {
-        float captureSizeRatio = (float) captureSize.getWidth() / captureSize.getHeight();
-
-        previewSize = goodEnough.get(0);
-        for (Size s : goodEnough) {
-          if ((float) s.getWidth() / s.getHeight() == captureSizeRatio) {
-            previewSize = s;
-            break;
-          }
-        }
-
-        Collections.reverse(goodEnough);
-        videoSize = goodEnough.get(0);
-        for (Size s : goodEnough) {
-          if ((float) s.getWidth() / s.getHeight() == captureSizeRatio) {
-            videoSize = s;
-            break;
-          }
-        }
+        previewSize = new Size(profile.videoFrameWidth, profile.videoFrameHeight);
       }
-    }
+    }*/
 
-    private void computeBestCaptureSize(StreamConfigurationMap streamConfigurationMap) {
-      // For still image captures, we use the largest available size.
-      captureSize =
-          Collections.max(
-              Arrays.asList(streamConfigurationMap.getOutputSizes(ImageFormat.JPEG)),
-              new CompareSizesByArea());
+    private void computeBestCaptureSize(
+        StreamConfigurationMap streamConfigurationMap,
+        CamcorderProfile profile,
+        String resolutionPreset) {
+      // For still image captures, use the largest image size if resolutionPreset is veryHigh
+      if ("veryHigh".equals(resolutionPreset)) {
+        captureSize =
+            Collections.max(
+                Arrays.asList(streamConfigurationMap.getOutputSizes(ImageFormat.JPEG)),
+                new CompareSizesByArea());
+      } else {
+        captureSize = new Size(profile.videoFrameWidth, profile.videoFrameHeight);
+      }
     }
 
     private void prepareMediaRecorder(String outputFilePath) throws IOException {
@@ -446,18 +498,77 @@ public class CameraPlugin implements MethodCallHandler {
       mediaRecorder = new MediaRecorder();
 
       if (enableAudio) mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+      if (enableAudio) mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+      if (enableAudio) mediaRecorder.setAudioSamplingRate(16000);
+      
       mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
       mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-      if (enableAudio) mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
       mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
       mediaRecorder.setVideoEncodingBitRate(1024 * 1000);
-      if (enableAudio) mediaRecorder.setAudioSamplingRate(16000);
       mediaRecorder.setVideoFrameRate(27);
-      mediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
+      //mediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
       mediaRecorder.setOutputFile(outputFilePath);
       mediaRecorder.setOrientationHint(getMediaOrientation());
-
+      
+      mediaRecorder.setProfile(recordingProfile);
+      
       mediaRecorder.prepare();
+    }
+
+    private CamcorderProfile getBestAvailableCamcorderProfileForResolutionPreset(
+        String resolutionPreset) {
+      int camcorderProfileIndex;
+      switch (resolutionPreset) {
+        case "veryHigh":
+          camcorderProfileIndex = 0;
+          break;
+        case "high":
+          camcorderProfileIndex = 1;
+          break;
+        case "medium":
+          camcorderProfileIndex = 2;
+          break;
+        case "low":
+          camcorderProfileIndex = 3;
+          break;
+        case "veryLow":
+          camcorderProfileIndex = 4;
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown resolution preset: " + resolutionPreset);
+      }
+
+      int cameraId = Integer.parseInt(cameraName);
+      switch (camcorderProfileIndex) {
+        case 0:
+          if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_2160P)) {
+            return CamcorderProfile.get(CamcorderProfile.QUALITY_2160P);
+          }
+        case 1:
+          if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_1080P)) {
+            return CamcorderProfile.get(CamcorderProfile.QUALITY_1080P);
+          }
+        case 2:
+          if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_720P)) {
+            return CamcorderProfile.get(CamcorderProfile.QUALITY_720P);
+          }
+        case 3:
+          if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_480P)) {
+            return CamcorderProfile.get(CamcorderProfile.QUALITY_480P);
+          }
+        case 4:
+          if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_CIF)) {
+            return CamcorderProfile.get(CamcorderProfile.QUALITY_CIF);
+          }
+        default:
+          if (CamcorderProfile.hasProfile(
+              Integer.parseInt(cameraName), CamcorderProfile.QUALITY_LOW)) {
+            return CamcorderProfile.get(CamcorderProfile.QUALITY_LOW);
+          } else {
+            throw new IllegalArgumentException(
+                "No capture session available for current capture session.");
+          }
+      }
     }
 
     private void open(@Nullable final Result result) {
@@ -472,7 +583,10 @@ public class CameraPlugin implements MethodCallHandler {
           // Used to steam image byte data to dart side.
           imageStreamReader =
               ImageReader.newInstance(
-                  previewSize.getWidth(), previewSize.getHeight(), ImageFormat.YUV_420_888, 2);
+                  recordingProfile.videoFrameWidth,
+                  recordingProfile.videoFrameHeight,
+                  ImageFormat.YUV_420_888,
+                  2);
 
           cameraManager.openCamera(
               cameraName,
@@ -698,6 +812,34 @@ public class CameraPlugin implements MethodCallHandler {
         startPreview();
         result.success(null);
       } catch (CameraAccessException | IllegalStateException e) {
+        result.error("videoRecordingFailed", e.getMessage(), null);
+      }
+    }
+
+    private void pauseVideoRecording(@NonNull final Result result) {
+      if (!recordingVideo) {
+        result.success(null);
+        return;
+      }
+
+      try {
+        mediaRecorder.pause();
+        result.success(null);
+      } catch (IllegalStateException e) {
+        result.error("videoRecordingFailed", e.getMessage(), null);
+      }
+    }
+
+    private void resumeVideoRecording(@NonNull final Result result) {
+      if (!recordingVideo) {
+        result.success(null);
+        return;
+      }
+
+      try {
+        mediaRecorder.resume();
+        result.success(null);
+      } catch (IllegalStateException e) {
         result.error("videoRecordingFailed", e.getMessage(), null);
       }
     }

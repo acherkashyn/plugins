@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -15,19 +16,31 @@ final MethodChannel _channel = const MethodChannel('plugins.flutter.io/camera');
 
 enum CameraLensDirection { front, back, external }
 
-enum ResolutionPreset { low, medium, high }
+/// Affect the quality of video recording and image capture:
+/// - veryLow = 352x288 (CIF)
+/// - low = 640x480 on iOS, 720x480 on Android (480p)
+/// - medium = 1280x720 (720p)
+/// - high = 1920x1080 (1080p/HD)
+/// - veryHigh = 3840x2160 (2160p/4K)
+///
+/// If a preset is not available on the camera being used a preset of lower quality will be selected automatically.
+enum ResolutionPreset { veryLow, low, medium, high, veryHigh }
 
 typedef onLatestImageAvailable = Function(CameraImage image);
 
 /// Returns the resolution preset as a String.
 String serializeResolutionPreset(ResolutionPreset resolutionPreset) {
   switch (resolutionPreset) {
+    case ResolutionPreset.veryHigh:
+      return 'veryHigh';
     case ResolutionPreset.high:
       return 'high';
     case ResolutionPreset.medium:
       return 'medium';
     case ResolutionPreset.low:
       return 'low';
+    case ResolutionPreset.veryLow:
+      return 'veryLow';
   }
   throw ArgumentError('Unknown ResolutionPreset value');
 }
@@ -115,8 +128,27 @@ class CameraPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ISSUE: The Texture seems to return a buffer in portrait in Android (width and height are inverted) and a buffer in landscape on iOS (which respects the aspect ratio).
+    // The ideal code (if the Texture was oriented properly in landscape for both Android and iOS) would be:
+    /*
+    RotatedBox(
+      quarterTurns: controller.description.sensorOrientation ~/ 90,
+      child: AspectRatio(
+        aspectRatio: controller.value.aspectRatio,
+        child: Texture(textureId: controller._textureId),
+      ),
+    )
+    */
     return controller.value.isInitialized
-        ? Texture(textureId: controller._textureId)
+        ? RotatedBox(
+            quarterTurns: Platform.isAndroid ? 0 : 1,
+            child: AspectRatio(
+              aspectRatio: Platform.isAndroid
+                  ? 1 / controller.value.aspectRatio
+                  : controller.value.aspectRatio,
+              child: Texture(textureId: controller._textureId),
+            ),
+          )
         : Container();
   }
 }
@@ -156,12 +188,14 @@ class CameraValue {
   /// The size of the preview in pixels.
   ///
   /// Is `null` until  [isInitialized] is `true`.
+  ///
+  /// The preview size may be smaller than the size of the recorded video (for performance issues). But the aspect ratio will be preserved.
   final Size previewSize;
 
-  /// Convenience getter for `previewSize.height / previewSize.width`.
+  /// Convenience getter for `previewSize.width / previewSize.height`.
   ///
   /// Can only be called when [initialize] is done.
-  double get aspectRatio => previewSize.height / previewSize.width;
+  double get aspectRatio => previewSize.width / previewSize.height;
 
   bool get hasError => errorDescription != null;
 
@@ -470,6 +504,62 @@ class CameraController extends ValueNotifier<CameraValue> {
       value = value.copyWith(isRecordingVideo: false);
       await _channel.invokeMethod<void>(
         'stopVideoRecording',
+        <String, dynamic>{'textureId': _textureId},
+      );
+    } on PlatformException catch (e) {
+      throw CameraException(e.code, e.message);
+    }
+  }
+
+  /// Pause recording.
+  Future<void> pauseVideoRecording() async {
+    if (!value.isInitialized || _isDisposed) {
+      throw CameraException(
+        'Uninitialized CameraController',
+        'pauseVideoRecording was called on uninitialized CameraController',
+      );
+    }
+    if (!value.isRecordingVideo) {
+      throw CameraException(
+        'No video is recording',
+        'pauseVideoRecording was called when no video is recording.',
+      );
+    }
+    try {
+      // value = value.copyWith(isRecordingVideo: false);
+      // TODO(amirh): remove this on when the invokeMethod update makes it to stable Flutter.
+      // https://github.com/flutter/flutter/issues/26431
+      // ignore: strong_mode_implicit_dynamic_method
+      await _channel.invokeMethod(
+        'pauseVideoRecording',
+        <String, dynamic>{'textureId': _textureId},
+      );
+    } on PlatformException catch (e) {
+      throw CameraException(e.code, e.message);
+    }
+  }
+
+  /// Resume recording.
+  Future<void> resumeVideoRecording() async {
+    if (!value.isInitialized || _isDisposed) {
+      throw CameraException(
+        'Uninitialized CameraController',
+        'resumeVideoRecording was called on uninitialized CameraController',
+      );
+    }
+    if (!value.isRecordingVideo) {
+      throw CameraException(
+        'No video is recording',
+        'resumeVideoRecording was called when no video is recording.',
+      );
+    }
+    try {
+      // value = value.copyWith(isRecordingVideo: false);
+      // TODO(amirh): remove this on when the invokeMethod update makes it to stable Flutter.
+      // https://github.com/flutter/flutter/issues/26431
+      // ignore: strong_mode_implicit_dynamic_method
+      await _channel.invokeMethod(
+        'resumeVideoRecording',
         <String, dynamic>{'textureId': _textureId},
       );
     } on PlatformException catch (e) {

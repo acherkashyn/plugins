@@ -1,3 +1,7 @@
+## 0.10.1+123
+
+* iOS: Fixed orientation and position issue for some videos metadata.
+
 ## 0.10.1+5
 
 * Fix race condition while disposing the VideoController.
@@ -45,6 +49,7 @@
 
 * Fixed iOS build warnings about implicit retains.
 
+>>>>>>> master
 ## 0.10.0+4
 
 * Android: Upgrade ExoPlayer to 2.9.6.

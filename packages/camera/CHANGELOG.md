@@ -1,3 +1,14 @@
+
+## 0.5.2+123
+
+* Added rotation metadata to iOS recorded videos.
+* **Breaking change**. The `aspectRatio` parameter now returns width/height instead of height/width as aspect ratio is always width:height.
+* **Breaking change**. Due to platform specific handling of Texture objects, the `CameraPreview` now use an `AspectRatio` and `RotatedBox` widget internally to display the preview with the correct ratio and rotation. Users should not wrap `CameraPreview` in a `AspectRatio` anymore.
+* Added 2 new quality presets (veryHigh and veryLow).
+* Now quality presets match on Android and iOS
+* Now quality presets can be used to control image capture quality.
+** NOTE: ** Existing presets have been updated, this will affect the quality of pictures and videos in existing apps.
+
 ## 0.5.2+2
 
 * Fix memory leak related to not unregistering stream handler in FlutterEventChannel when disposing camera.
@@ -23,6 +34,7 @@ a `MissingPluginException.`
 * **Breaking Change** This plugin no longer handles closing and opening the camera on Android
   lifecycle changes. Please use `WidgetsBindingObserver` to control camera resources on lifecycle
   changes. See example project for example using `WidgetsBindingObserver`.
+>>>>>>> master
 
 ## 0.4.3+2
 
